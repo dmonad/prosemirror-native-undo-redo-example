@@ -1,0 +1,27 @@
+{
+  "name": "tmppm",
+  "private": true,
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "concurrently 'rollup -wc' 'serve'"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "prosemirror-example-setup": "^1.0.1",
+    "prosemirror-model": "^1.7.0",
+    "prosemirror-schema-basic": "^1.0.0",
+    "prosemirror-schema-list": "^1.0.2",
+    "prosemirror-state": "^1.2.2",
+    "prosemirror-view": "^1.8.3"
+  },
+  "devDependencies": {
+    "concurrently": "^4.1.0",
+    "rollup": "^1.6.0",
+    "rollup-plugin-commonjs": "^9.2.1",
+    "rollup-plugin-node-resolve": "^4.0.1",
+    "serve": "^10.1.2"
+  }
+}
