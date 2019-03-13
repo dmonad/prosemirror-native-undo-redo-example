@@ -43,7 +43,7 @@ const simulateAddToUndoStack = () => {
   return restoreRange
 }
 
-let fakeUndoActive = false
+let simulatedUndoActive = false
 
 /**
  * By performing a fake undo on `undoMock`, we force the browser to put something on its redo-stack
@@ -52,15 +52,29 @@ const simulateAddToRedoStack = () => {
   // Perform a fake action on undoMock. The browser will think that it can undo this action.
   const restoreRange = simulateAddToUndoStack()
   // wait for the next tick, and tell the browser to undo the fake action on undoMock
-  fakeUndoActive = true
-  document.execCommand('undo')
+  simulatedUndoActive = true
+  try {
+    document.execCommand('undo')
+  } finally {
+    simulatedUndoActive = false
+  }
   // restore previous selection
   setSelection(restoreRange)
-  fakeUndoActive = false
 }
 
+const view = new EditorView(document.querySelector('#editor'), {
+  state: EditorState.create({
+    doc: DOMParser.fromSchema(mySchema).parse(document.querySelector('#content')),
+    plugins: exampleSetup({ schema: mySchema })
+  }),
+  handleDOMEvents: {
+    beforeinput: (view, event) => beforeinputHandler(event)
+  }
+})
+
 const beforeinputHandler = event => {
-  if (fakeUndoActive) {
+  // we only handle user interactions
+  if (simulatedUndoActive) {
     return
   }
   switch (event.inputType) {
@@ -87,14 +101,6 @@ const beforeinputHandler = event => {
   return false
 }
 
-window.view = new EditorView(document.querySelector('#editor'), {
-  state: EditorState.create({
-    doc: DOMParser.fromSchema(mySchema).parse(document.querySelector('#content')),
-    plugins: exampleSetup({ schema: mySchema })
-  }),
-  handleDOMEvents: {
-    beforeinput: (view, event) => beforeinputHandler(event)
-  }
-})
-
+// In safari the historyUndo/Redo event is triggered on the undoMock
+// In Chrome these events are triggered on the editor
 undoMock.addEventListener('beforeinput', beforeinputHandler)
