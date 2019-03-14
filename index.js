@@ -14,8 +14,8 @@ const mySchema = new Schema({
 })
 
 /**
- * Create a hidden contenteditable element
- * We perform fake actions on this element to manipulate the browser undo stack
+ * Create a hidden contenteditable element.
+ * We perform fake actions on this element to manipulate the browser undo stack, instead on the real editor element.
  */
 const undoMock = document.createElement('div')
 undoMock.setAttribute('contenteditable', 'true')
@@ -43,7 +43,16 @@ const simulateAddToUndoStack = () => {
   return restoreRange
 }
 
-let simulatedUndoActive = false
+let simulatedActionActive = false
+
+const simulateExecCommand = cmd => {
+  simulatedActionActive = true
+  try {
+    document.execCommand(cmd)
+  } finally {
+    simulatedActionActive = false
+  }
+}
 
 /**
  * By performing a fake undo on `undoMock`, we force the browser to put something on its redo-stack
@@ -51,13 +60,7 @@ let simulatedUndoActive = false
 const simulateAddToRedoStack = () => {
   // Perform a fake action on undoMock. The browser will think that it can undo this action.
   const restoreRange = simulateAddToUndoStack()
-  // wait for the next tick, and tell the browser to undo the fake action on undoMock
-  simulatedUndoActive = true
-  try {
-    document.execCommand('undo')
-  } finally {
-    simulatedUndoActive = false
-  }
+  simulateExecCommand('undo')
   // restore previous selection
   setSelection(restoreRange)
 }
@@ -68,13 +71,52 @@ const view = new EditorView(document.querySelector('#editor'), {
     plugins: exampleSetup({ schema: mySchema })
   }),
   handleDOMEvents: {
-    beforeinput: (view, event) => beforeinputHandler(event)
+    beforeinput: (view, event) => beforeinputHandler(event),
+    input: (view, event) => inputHandler(event)
   }
 })
 
+/**
+ * If the browser does not support beforeinput, history events will be cought by this handler.
+ * We can't cancel input events, but we try to revert its changes.
+ */
+const inputHandler = event => {
+  // only handle user interactions
+  if (simulatedActionActive) {
+    return
+  }
+  // Note that `inputType` is undefined in some browsers
+  // Firefox implements it since version 66 (but does not yet support beforeinput)
+  switch (event.inputType) {
+    case 'historyUndo':
+      simulateExecCommand('redo')
+      undo(view.state, view.dispatch)
+      if (undo(view.state)) {
+        // we can perform another undo
+        simulateAddToUndoStack()
+      }
+      simulateAddToRedoStack()
+      return true
+    case 'historyRedo':
+      simulateExecCommand('undo')
+      redo(view.state, view.dispatch)
+      if (!redo(view.state)) {
+        // by triggering another action, we force the browser to empty the undo stack
+        simulateAddToUndoStack()
+      } else {
+        simulateAddToRedoStack()
+      }
+      return true
+  }
+}
+
+/**
+ * If the browser supports beforinput, we cancel history events and perform a fake undo/redo
+ * on the mockUndo element.
+ */
 const beforeinputHandler = event => {
-  // we only handle user interactions
-  if (simulatedUndoActive) {
+  // only handle user interactions
+  if (simulatedActionActive) {
     return
   }
   switch (event.inputType) {
@@ -104,3 +146,5 @@ const beforeinputHandler = event => {
 // In safari the historyUndo/Redo event is triggered on the undoMock
 // In Chrome these events are triggered on the editor
 undoMock.addEventListener('beforeinput', beforeinputHandler)
+
+undoMock.addEventListener('input', inputHandler)
